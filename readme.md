@@ -1,3 +1,19 @@
+
+Generating alleles file locally
+-------------------------------
+
+In order reduce the amount of data to be uploaded some of the MGT pipeline processing can be performed locally.
+
+These steps include:
+
+#. Species, serovar checking
+#. Genome assembly
+#. Genome QC
+#. Extraction of alleles from genome using known allele fasta file
+#. Assignment of 7 gene MLST sequence type
+
+The resulting file is often several orders of magnitude smaller than the raw reads, facilitating rapid upload and analysis.
+
 Install
 -----------
 **1. Download this repo:**
