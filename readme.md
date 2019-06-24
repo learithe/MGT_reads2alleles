@@ -7,9 +7,13 @@ In order reduce the amount of data to be uploaded some of the MGT pipeline proce
 These steps include:
 
 **1 Species, serovar checking**
+
 **2 Genome assembly**
+
 **3 Genome QC**
+
 **4 Extraction of alleles from genome using known allele fasta file**
+
 **5 Assignment of 7 gene MLST sequence type**
 
 The resulting file is often several orders of magnitude smaller than the raw reads, facilitating rapid upload and analysis.
