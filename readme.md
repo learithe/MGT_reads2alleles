@@ -52,7 +52,7 @@ install miniconda3 -> https://conda.io/miniconda.html
 
 Next a Miniconda3 environment will be created and will contain all the required dependencies for this pipeline.
 The "fq_to_allele.yaml" has been provided to simply instruct Miniconda3 when creating an environment.
-The environment will be named "deployable_fq_to_genome".
+The environment will be named "fq_to_allele".
 
 	conda env create -f /path_to_MGT_read2alleles/fq_to_allele.yaml -n fq_to_allele
 
