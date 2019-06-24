@@ -2,7 +2,7 @@ Install
 -----------
 **2. Download this repo:**
 
-	git clone 
+	git clone https://github.com/LanLab/MGT_reads2alleles.git
 
 **1. Download latest miniKraken Database:**
 
@@ -34,13 +34,13 @@ Next a Miniconda3 environment will be created and will contain all the required 
 The "fq_to_allele.yaml" has been provided to simply instruct Miniconda3 when creating an environment.
 The environment will be named "deployable_fq_to_genome".
 
-	conda env create -f /path_to_Reads2MGTAlleles/fq_to_allele.yaml -n fq_to_allele
+	conda env create -f /path_to_MGT_read2alleles/fq_to_allele.yaml -n fq_to_allele
 
 **5. Users Permission**
 
 Lastly, the user permissions for the shovill_cmd folder must be adjusted.
 
-	chmod 755 /path_to_Reads2MGTAlleles/shovill_cmd
+	chmod 755 /path_to_MGT_read2alleles/shovill_cmd
 
 Run
 ---
