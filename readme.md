@@ -1,10 +1,10 @@
 Install
 -----------
-**2. Download this repo:**
+**1. Download this repo:**
 
 	git clone https://github.com/LanLab/MGT_reads2alleles.git
 
-**1. Download latest miniKraken Database:**
+**2. Download latest miniKraken Database:**
 
 Before setting up the pipeline for processing raw data reads into alleles, firstly download a minikraken database (warning is 2.9GB).
 
@@ -17,18 +17,18 @@ OR
 	unzip archive
 
 
-**2. Add database folder variable with:**
+**3. Add database folder variable with:**
 
     export KRAKEN_DEFAULT_DB="/home/user/minikraken_db_folder"
     
 
-**3. Install miniconda3:**
+**4. Install miniconda3:**
 
 This pipeline requires you already have a miniconda3 installed.  
 install miniconda3 -> https://conda.io/miniconda.html
 
 
-**4. Create miniconda3 environment:**
+**5. Create miniconda3 environment:**
 
 Next a Miniconda3 environment will be created and will contain all the required dependencies for this pipeline.
 The "fq_to_allele.yaml" has been provided to simply instruct Miniconda3 when creating an environment.
@@ -36,7 +36,7 @@ The environment will be named "deployable_fq_to_genome".
 
 	conda env create -f /path_to_MGT_read2alleles/fq_to_allele.yaml -n fq_to_allele
 
-**5. Users Permission**
+**6. Users Permission**
 
 Lastly, the user permissions for the shovill_cmd folder must be adjusted.
 
