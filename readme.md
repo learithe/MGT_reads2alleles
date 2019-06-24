@@ -1,5 +1,9 @@
 Install
 -----------
+**2. Download this repo:**
+
+	git clone 
+
 **1. Download latest miniKraken Database:**
 
 Before setting up the pipeline for processing raw data reads into alleles, firstly download a minikraken database (warning is 2.9GB).
