@@ -6,9 +6,9 @@ In order reduce the amount of data to be uploaded to the [MGT database](http://m
 
 These steps include:
 
-**1 - Species, serovar checking**
+**1 - Species, serovar checking with [kraken](https://ccb.jhu.edu/software/kraken/) and [SISTR](github.com/phac-nml/sistr_cmd)**
 
-**2 - Genome assembly**
+**2 - Genome assembly with [shovill](https://github.com/tseemann/shovill) and [skesa](https://github.com/ncbi/SKESA)**
 
 **3 - Genome QC**
 
