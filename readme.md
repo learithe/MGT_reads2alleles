@@ -2,7 +2,7 @@
 Generating alleles file locally
 -------------------------------
 
-In order reduce the amount of data to be uploaded some of the MGT pipeline processing can be performed locally.
+In order reduce the amount of data to be uploaded to mgtdb.unsw.edu.au some of the MGT pipeline processing can be performed locally.
 
 These steps include:
 
