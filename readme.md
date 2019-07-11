@@ -74,60 +74,65 @@ Run
 
     python /path/to/reads_to_alleles.py -h
 
+	usage: reads_to_alleles.py [-h] [-s SPECIES] [--no_serotyping NO_SEROTYPING]
+				   [-y SEROTYPE] [-t THREADS] [-m MEMORY] [-f]
+				   [--min_largest_contig MIN_LARGEST_CONTIG]
+				   [--max_contig_no MAX_CONTIG_NO]
+				   [--genome_min GENOME_MIN] [--genome_max GENOME_MAX]
+				   [--n50_min N50_MIN] [--kraken_db KRAKEN_DB]
+				   [--hspident HSPIDENT] [--locusnlimit LOCUSNLIMIT]
+				   inputreads refalleles reflocs outpath
 
-    usage: reads_to_alleles.py [-h] [-s SPECIES] [--no_serotyping NO_SEROTYPING]
-                               [-y SEROTYPE] [-t THREADS] [-m MEMORY] [-f]
-                               [--min_largest_contig MIN_LARGEST_CONTIG]
-                               [--max_contig_no MAX_CONTIG_NO]
-                               [--genome_min GENOME_MIN] [--genome_max GENOME_MAX]
-                               [--n50_min N50_MIN] [--kraken_db KRAKEN_DB]
-                               ingenome refalleles reflocs outpath
-    
-    
-    positional arguments:
-      ingenome              Input genome
-      refalleles            File path to MGT reference alleles file
-      reflocs               File path to MGT allele locations file
-      outpath               Path to ouput file name
-    
-    optional arguments:
-      -h, --help            show this help message and exit
-      -s SPECIES, --species SPECIES
-                            String to find in kraken species confirmation test
-                            (default: Salmonella enterica)
-      --no_serotyping NO_SEROTYPING
-                            Do not run Serotyping of Salmonella using SISTR (ON by
-                            default) (default: None)
-      -y SEROTYPE, --serotype SEROTYPE
-                            Serotype to match in SISTR, semicolon separated
-                            (default: Typhimurium;I 4,[5],12:i:-)
-      -t THREADS, --threads THREADS
-                            number of computing threads (default: 4)
-      -m MEMORY, --memory MEMORY
-                            memory available in GB (default: 8)
-      -f, --force           overwrite output files with same strain name?
-                            (default: False)
-      --min_largest_contig MIN_LARGEST_CONTIG
-                            Assembly quality filter: minimum allowable length of
-                            the largest contig in the assembly in bp (default for
-                            salmonella) (default: 60000)
-      --max_contig_no MAX_CONTIG_NO
-                            Assembly quality filter: maximum allowable number of
-                            contigs allowed for assembly (default for salmonella)
-                            (default: 700)
-      --genome_min GENOME_MIN
-                            Assembly quality filter: minimum allowable total
-                            assembly length in bp (default for salmonella)
-                            (default: 4500000)
-      --genome_max GENOME_MAX
-                            Assembly quality filter: maximum allowable total
-                            assembly length in bp (default for salmonella)
-                            (default: 5500000)
-      --n50_min N50_MIN     Assembly quality filter: minimum allowable n50 value
-                            in bp (default for salmonella) (default: 20000)
-      --kraken_db KRAKEN_DB
-                            path for kraken db (if KRAKEN_DEFAULT_DB variable has
-                            already been set then ignore) (default: )
+	positional arguments:
+	  inputreads            Input paired fastq(.gz) files, comma separated (i.e.
+				name_1.fastq,name_2.fastq )
+	  refalleles            File path to MGT reference alleles file
+	  reflocs               File path to MGT allele locations file
+	  outpath               Path to ouput file name
+
+	optional arguments:
+	  -h, --help            show this help message and exit
+	  -s SPECIES, --species SPECIES
+				String to find in kraken species confirmation test
+				(default: Salmonella enterica)
+	  --no_serotyping NO_SEROTYPING
+				Do not run Serotyping of Salmonella using SISTR (ON by
+				default) (default: None)
+	  -y SEROTYPE, --serotype SEROTYPE
+				Serotype to match in SISTR, semicolon separated
+				(default: Typhimurium;I 4,[5],12:i:-)
+	  -t THREADS, --threads THREADS
+				number of computing threads (default: 4)
+	  -m MEMORY, --memory MEMORY
+				memory available in GB (default: 8)
+	  -f, --force           overwrite output files with same strain name?
+				(default: False)
+	  --min_largest_contig MIN_LARGEST_CONTIG
+				Assembly quality filter: minimum allowable length of
+				the largest contig in the assembly in bp (default:
+				60000)
+	  --max_contig_no MAX_CONTIG_NO
+				Assembly quality filter: maximum allowable number of
+				contigs allowed for assembly (default: 700)
+	  --genome_min GENOME_MIN
+				Assembly quality filter: minimum allowable total
+				assembly length in bp (default: 4500000)
+	  --genome_max GENOME_MAX
+				Assembly quality filter: maximum allowable total
+				assembly length in bp (default: 5500000)
+	  --n50_min N50_MIN     Assembly quality filter: minimum allowable n50 value
+				in bp (default for salmonella) (default: 20000)
+	  --kraken_db KRAKEN_DB
+				path for kraken db (if KRAKEN_DEFAULT_DB variable has
+				already been set then ignore) (default:
+				/srv/scratch/lanlab/kraken_dir/minikraken_20141208)
+	  --hspident HSPIDENT   BLAST percentage identity needed for hsp to be
+				returned (default: 0.98)
+	  --locusnlimit LOCUSNLIMIT
+				minimum proportion of the locus length that must be
+				present (not masked with Ns) (default: 0.8)
+
+
 
 Examples
 --------
