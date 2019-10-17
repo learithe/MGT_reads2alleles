@@ -8,7 +8,6 @@ import os
 from os.path import commonprefix
 import shutil
 import argparse
-# import psutil
 import subprocess
 from csv import reader
 import multiprocessing
@@ -21,58 +20,17 @@ import itertools
 import datetime
 from copy import deepcopy
 import time
-import dis
+from shutil import which
 
-"""
-Dependencies:
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
 
-Python 3
-conda install psutil
-conda install biopython
-conda install Kraken 
-(will need to DL minikraken DB)
-export KRAKEN_DEFAULT_DB='/srv/scratch/lanlab/kraken_dir/minikraken_20141208'
-conda install assembly-stats
-conda install blast
-conda install mafft
-conda install -c bioconda sistr_cmd
-conda install -c bioconda mlst
-
-shovill (include 15cov version)
-
-shovill dependencies
-    skesa
-    megahit (not used)
-    velvet (not used)
-    spades (not used)
-    Lighter
-    FLASH
-    SAMtools >= 1.3
-    BWA MEM
-    MASH >= 2.0
-    seqtk
-    pigz
-    Pilon (Java)
-    Trimmomatic (Java)
-    
-conda:
-Java
-kraken
-
-
-
-"""
-
-
-
-
-# TODO return wrong input status (check that it is intact/valid fastq file) to the database (update db to say input incorrect)
-# TODO also write back to db for contamination or genome quality
 
 ######## MAIN ########
 
 
-def main(args):
+def main():
     """
     run two components of reads -> alleleles:
     1 reads -> genome (assembly pipeline)
@@ -82,14 +40,86 @@ def main(args):
     :return: output alleles file with 7gene MLST, allele calls and seq and uncallable loci
     """
 
+    args = get_args()
 
+    query_genome, strainid, mgt1st, serotype = run_assemblypipe(args)
 
-    query_genome, strainid, mgt1st = run_assemblypipe(args)
+    genome_to_alleles(query_genome, strainid, args, mgt1st, serotype)
 
-    genome_to_alleles(query_genome, strainid, args, mgt1st)
+######## ARGS ########
 
+def get_args():
 
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument("-i", "--inputreads",
+                        help="Input paired fastq(.gz) files, comma separated (i.e. name_1.fastq,name_2.fastq )",
+                        required=True)
+    parser.add_argument("-r","--refalleles",
+                        help="File path to MGT reference allele file.",
+                        required=True)
+    parser.add_argument("-o", "--outpath", help="Path to ouput file name,required=True", required=True)
+    parser.add_argument("-s", "--species", help="String to find in kraken species confirmation test",
+                        default="Salmonella enterica")
+    parser.add_argument("--no_serotyping", help="Do not run Serotyping of Salmonella using SISTR (ON by default)")
+    parser.add_argument("-y", "--serotype", help="Serotype to match in SISTR, semicolon separated",
+                        default="Typhimurium;I 4,[5],12:i:-")
+    parser.add_argument("-t", "--threads", help="number of computing threads",
+                        default="4")
+    parser.add_argument("-m", "--memory", help="memory available in GB",
+                        default="8")
+    parser.add_argument("-f", "--force", help="overwrite output files with same strain name?", action='store_true')
+    parser.add_argument("--min_largest_contig",
+                        help="Assembly quality filter: minimum allowable length of the largest contig in the assembly in bp",
+                        default=60000)
+    parser.add_argument("--max_contig_no",
+                        help="Assembly quality filter: maximum allowable number of contigs allowed for assembly",
+                        default=700)
+    parser.add_argument("--genome_min",
+                        help="Assembly quality filter: minimum allowable total assembly length in bp",
+                        default=4500000)
+    parser.add_argument("--genome_max",
+                        help="Assembly quality filter: maximum allowable total assembly length in bp",
+                        default=5500000)
+    parser.add_argument("--n50_min",
+                        help="Assembly quality filter: minimum allowable n50 value in bp (default for salmonella)",
+                        default=20000)
+    parser.add_argument("--kraken_db",
+                        help="path for kraken db (if KRAKEN_DEFAULT_DB variable has already been set then ignore)",
+                        default="/srv/scratch/lanlab/kraken_dir/minikraken_20141208")
+    parser.add_argument("--hspident",
+                        help="BLAST percentage identity needed for hsp to be returned",
+                        default=0.98, type=float)
+    parser.add_argument("--locusnlimit",
+                        help="minimum proportion of the locus length that must be present (not masked with Ns)",
+                        default=0.80, type=float)
+    parser.add_argument("--snpwindow",
+                        help="Size of sliding window to screen for overly dense SNPs",
+                        default=40)
+    parser.add_argument("--densitylim",
+                        help="maximum number of SNPs allowed to be present in window before window is masked",
+                        default=4)
+    parser.add_argument("--refsize",
+                        help="Approx size of genome for shovill input in megabases i.e. 5.0 or 2.9", type=float,
+                        default=5.0)
+    parser.add_argument("--blastident",
+                        help="BLAST percentage identity needed for hsp to be returned",
+                        default=90)
+
+    args = parser.parse_args()
+
+    args.serotodb = {'Typhimurium': 'Salmonella',
+                     'I 4,[5],12:i:-': 'Salmonella',
+                     'Typhi': 'Enterica',
+                     'Enteritidis': 'Enteritidis',
+                     'Paratyphi B var. Java': 'Enterica',
+                     'Paratyphi B var. Java monophasic': 'Enterica',
+                     'Paratyphi B': 'Enterica',
+                     'Paratyphi A': 'Enterica',
+                     'Paratyphi C': 'Enterica',
+                     'Vibrio cholerae': 'Vibrio',
+                     'Bordetella pertussis': 'Pertussis'}
+    return args
 
 ######## ASSEMBLY PIPELINE (incl shovill + skesa) ########
 
@@ -192,12 +222,14 @@ def run_assemblypipe(args):
 
     ##### Run assembly-stats/assembly quality filters #####
 
-    run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_stats)
+    run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_stats,args)
 
     ##### Run SISTR serotyping #####
-
-    if not args.no_serotyping:
-        run_sistr(args, rename_skesa, strain, sistr_out, contam, serovar_fail)
+    serotype = ""
+    if args.no_serotyping:
+        serotype = args.species
+    else:
+        serotype = run_sistr(args, rename_skesa, strain, sistr_out, contam, serovar_fail)
 
     ##### Run 7 gene MLST program #####
 
@@ -209,8 +241,7 @@ def run_assemblypipe(args):
 
     print("Assembly completed in: ", elapsed_time)
 
-    return skesa_pass, strain, MGT1ST
-
+    return skesa_pass, strain, MGT1ST, serotype
 
 
 def check_kraken(krakenout, target_species):
@@ -236,44 +267,44 @@ def check_kraken(krakenout, target_species):
     return contam
 
 
-
-def quast_filter(infile):
-    """
-    Not currently used - can be adopted if QUAST is easier to install with conda
-    :param infile:
-    :return:
-    """
-    inf = open(infile, "r").read().splitlines()
-
-    values = [x.split("\t")[-1] for x in inf[1:]]
-
-    contigs = float(values[12])
-    largest_cont = float(values[13])
-    length = float(values[14])
-    gc = float(values[15])
-    n50 = float(values[16])
-    gene_no = float(values[21])
-
-    faillis = []
-
-    if contigs >= 500:
-        faillis.append(">500 contigs")
-    if largest_cont <= 100000:
-        faillis.append("largest contig < 100kb")
-    if length < 4000000 or length > 6000000:
-        faillis.append("Genome outside of allowed range: 4-6Mb")
-    if gc < 50 or gc > 54:
-        faillis.append("GC% out of allowed range: 50-54%")
-    if n50 <= 30000:
-        faillis.append("N50 less than 30Kb")
-    if gene_no < 3600:
-        faillis.append("less than 3600 genes (predicted by glimmer within quast)")
-
-    if len(faillis) == 0:
-        return True, faillis
-    else:
-        return False, faillis
-
+#
+# def quast_filter(infile):
+#     """
+#     Not currently used - can be adopted if QUAST is easier to install with conda
+#     :param infile:
+#     :return:
+#     """
+#     inf = open(infile, "r").read().splitlines()
+#
+#     values = [x.split("\t")[-1] for x in inf[1:]]
+#
+#     contigs = float(values[12])
+#     largest_cont = float(values[13])
+#     length = float(values[14])
+#     gc = float(values[15])
+#     n50 = float(values[16])
+#     gene_no = float(values[21])
+#
+#     faillis = []
+#
+#     if contigs >= 500:
+#         faillis.append(">500 contigs")
+#     if largest_cont <= 100000:
+#         faillis.append("largest contig < 100kb")
+#     if length < 4000000 or length > 6000000:
+#         faillis.append("Genome outside of allowed range: 4-6Mb")
+#     if gc < 50 or gc > 54:
+#         faillis.append("GC% out of allowed range: 50-54%")
+#     if n50 <= 30000:
+#         faillis.append("N50 less than 30Kb")
+#     if gene_no < 3600:
+#         faillis.append("less than 3600 genes (predicted by glimmer within quast)")
+#
+#     if len(faillis) == 0:
+#         return True, faillis
+#     else:
+#         return False, faillis
+#
 
 
 def sistr_filter(sistr_out, serovars):
@@ -289,16 +320,14 @@ def sistr_filter(sistr_out, serovars):
 
     prediction = list(reader(infile))[1][-3]
 
-    serovars = [x.lower() for x in serovars.split(";")]
     sistr_pass = False
     for sero in serovars:
-        if prediction.lower() in sero or sero in prediction.lower():
+        if prediction.lower() == sero.lower():
             sistr_pass = True
             return sistr_pass, prediction
         else:
             pred = prediction
     return sistr_pass, pred
-
 
 
 def assem_filter(inp, args):
@@ -342,7 +371,6 @@ def assem_filter(inp, args):
         return False, faillis
 
 
-
 def run_mlst(ingenome):
     ##### Run 7 gene MLST program #####
 
@@ -356,7 +384,6 @@ def run_mlst(ingenome):
     MGT1ST = mlst_result.split("\t")[2]
 
     return MGT1ST
-
 
 
 def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
@@ -382,8 +409,6 @@ def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
                                                                                            krakenout1, fq1,
                                                                                            fq2)
 
-
-
     subprocess.Popen(kraken_cmd, shell=True).wait()
 
     kraken_report_cmd = 'kraken-report ' + krakenout1
@@ -392,7 +417,7 @@ def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
 
     kraken_result = proc.stdout.read()
 
-    krakenReport = open(krakenout1+"_report.txt","w")
+    krakenReport = open(krakenout1 + "_report.txt", "w")
 
     kraken_out = kraken_result.decode('utf8')
 
@@ -421,20 +446,18 @@ def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
         sys.exit(outmessage)
 
 
-
 def run_shovill(args, fq1, fq2, script_path, shovil_pref, skesa_assembly, rename_skesa):
     ##TODO work out shovill inclusion / dependencies
 
-    shovill_cmd = script_path + "/shovill_cmd/bin/shovill_15cov -R1 {} -R2 {} --gsize 5.0M --outdir {} --cpus {} --ram {} --assembler skesa --force".format(
-        fq1, fq2, shovil_pref, args.threads, args.memory)
+    shovill_cmd = script_path + "/shovill_cmd/bin/shovill_15cov -R1 {} -R2 {} --gsize {}M --outdir {} --cpus {} --ram {} --assembler skesa --force".format(
+        fq1, fq2, args.refsize, shovil_pref, args.threads, args.memory)
 
     subprocess.Popen(shovill_cmd, shell=True).wait()
 
     shutil.copy(skesa_assembly, rename_skesa)
 
 
-
-def run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_stats):
+def run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_stats,args):
     """
     run assembly-stats and pass results to assem_filter() if fails for 1 or more reasons sys.exit with reasons for fail
     """
@@ -448,7 +471,7 @@ def run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_sta
 
     assembly_pass, fail_reasons = assem_filter(assem_result, args)
 
-    assem_out = open(assembly_stats,"w")
+    assem_out = open(assembly_stats, "w")
     assem_out.write(assem_result)
     assem_out.close()
 
@@ -462,7 +485,6 @@ def run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_sta
         sys.exit(outmessage)
 
 
-
 def run_sistr(args, rename_skesa, strain, sistr_out, contam, serovar_fail):
     """
     run sistr and pass results to sistr_filter if not the correct serovar sys.exit out
@@ -472,23 +494,34 @@ def run_sistr(args, rename_skesa, strain, sistr_out, contam, serovar_fail):
 
     subprocess.Popen(sistr_cmd, shell=True).wait()
 
-    serovar_pass, prediction = sistr_filter(sistr_out, args.serotype)
+    serotype_d = dict(args.serotodb)
+
+    serotype_list = list(serotype_d.keys())
+
+    # print(serotype_list)
+
+    serovar_pass, prediction = sistr_filter(sistr_out, serotype_list)
+
+    # print(serovar_pass,prediction)
+
+    # print(serotype_d)
 
     if not serovar_pass:
         outc = open(contam, "w")
-        outmessage = "S: {} has been predicted as\t{}\twhich is different from name in input\t{}\n".format(strain,
-                                                                                                        prediction,
-                                                                                                        args.serotype)
+        outmessage = "S: {} has been predicted as\t{}\twhich is not currently supported in MGT\n".format(strain,
+                                                                                                         prediction)
         outc.write(outmessage)
         outc.close()
         shutil.copy(rename_skesa, serovar_fail)
         sys.exit(outmessage)
 
+    return prediction
+
 
 ######## ASSEMBLY TO ALLELES ########
 
 
-def genome_to_alleles(query_genome, strain_name, args, mgt1st):
+def genome_to_alleles(query_genome, strain_name, args, mgt1st, serotype):
     """
     Takes assembly from assemblypipe and blasts against set of known alleles for all loci
     exact matches to existing alleles are called from perfect blast hits
@@ -505,12 +538,14 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st):
 
     # test_locus = "STM4037"
     print("Parsing inputs\n")
-    script_path = sys.path[0]
-    ref_alleles_in = args.refalleles  # known, intact, allele fasta file
-    locus_refrence_locs = args.reflocs  # genomic location of alleles in ref genome
+    # script_path = sys.path[0]
 
-
-    ####TODO need way to modify below to match requirements for different species/serovars
+    if args.refalleles:
+        ref_alleles_in = args.refalleles
+    else:
+        ref_alleles_in = os.path.abspath("./species_specific_files/")
+        db = args.serotodb[serotype]
+        ref_alleles_in = "{}/{}/{}_ref_alleles.fasta".format(ref_alleles_in, db, db)
 
     hsp_ident_thresh = float(args.hspident)  # scriptvariable blast identity to at least one other allele for each locus
     missing_limit = args.locusnlimit  # scriptvariable minimum allowable fraction of locus not lost (i.e. max 20% can be "N")
@@ -541,49 +576,41 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st):
 
     qgenome = {x.id: str(x.seq) for x in qgenomeseq}  # query genome as dictionary of {fastq_header:seq}
 
-    locus_size_dict = get_sizes_dict(locus_refrence_locs)  # dictionary of sizes for each locus
+    locus_allowed_size, seqs = get_allowed_locus_sizes(ref_alleles_in)
 
-    allele_size_dict = {x + ":1": int(locus_size_dict[x]) for x in locus_size_dict}
-
-    locus_list = [x for x in allele_size_dict.keys()]  # list of loci to process
+    locus_list = [x for x in locus_allowed_size.keys()]
 
     print("Running BLAST\n")
 
     # gets ref allele hits and blast hits against reference
-    alleles_called_ref, ref_blast_hits, no_hits = ref_exact_blast(query_genome, ref_alleles_in, locus_size_dict,
-                                                                  tempdir)
+    alleles_called_ref, ref_blast_hits, no_hits = ref_exact_blast(query_genome, ref_alleles_in, locus_allowed_size,
+                                                                  tempdir,args)
+
+    print(no_hits)
 
     print("Exact matches found: {}\n".format(len(alleles_called_ref.keys())))
     print("Processing partial BLAST hits\n")
 
-    partial_loci = [x.split(":")[0] for x in list(locus_list)]  # list of all loci
+    partial_loci = list(locus_list)  # list of all loci
 
     for i in alleles_called_ref:
         partial_loci.remove(i)  # if locus has exact match to existing remove from list
 
-    # Get allele sequences for "reference" genome which is used to call SNPs
-    ref_alleles = {}
-    for i in SeqIO.parse(ref_alleles_in, "fasta"):
-        if i.id[-2:] == ":1":
-            locus = i.id.split(":")[0]
-            seq = i.seq
-            ref_alleles[locus] = seq
-
     # get hsps that match to loci but are not intact for partial_loci list
     # also dict of loci and reasons for uncallable loci in query genome
-    partial_hsps, uncallable = get_partial_match_query_region(ref_blast_hits, partial_loci, allele_size_dict,
-                                                              ref_alleles, qgenome, hsp_ident_thresh)
+    partial_hsps, uncallable, tophitlocus = get_partial_match_query_region(ref_blast_hits, partial_loci, qgenome,
+                                                                           hsp_ident_thresh, seqs)
 
     print("Reconstructing fragmented loci\n")
 
     # Try to rebuild each locus that has partial hsps matching it
     # returns reconstructed loci (with Ns) where possible
-    reconstructed, uncallable = generate_query_allele_seqs(partial_hsps, query_genome, allele_size_dict, missing_limit,
-                                                           wordsize, ref_alleles, qgenome, hsp_ident_thresh, uncallable)
-
+    reconstructed, uncallable = generate_query_allele_seqs(partial_hsps, query_genome, missing_limit,
+                                                           wordsize, tophitlocus, qgenome, hsp_ident_thresh, uncallable,
+                                                           args)
 
     print("Writing outputs\n")
-    write_outalleles(outfile, reconstructed, alleles_called_ref, uncallable, locus_list, mgt1st, no_hits)
+    write_outalleles(outfile, reconstructed, alleles_called_ref, uncallable, locus_list, mgt1st, no_hits, serotype)
 
     elapsed_time = time.time() - start_time
 
@@ -595,8 +622,7 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st):
     print("[" + timestamp + "] MGT fastq to alleles pipeline complete for strain: " + strain_name)
 
 
-
-def ref_exact_blast(query_genome, ref_fasta, allele_sizes, tempdir):
+def ref_exact_blast(query_genome, ref_fasta, allele_sizes, tempdir,args):
     """
     runs blast and extracts exact hits to existing alleles
     data structure of parsed blast results:
@@ -616,9 +642,11 @@ def ref_exact_blast(query_genome, ref_fasta, allele_sizes, tempdir):
     """
     no_hits = list(allele_sizes.keys())
     # scriptvariable 15 blast word size
-    # scriptvariable 10000 culling limit
-    # scriptvariable 90 blast identity limit
-    blast_hits = run_blast(query_genome, ref_fasta, 15, 10000, 90, tempdir)
+    # scriptvariable 1000000 culling limit
+
+    bident = int(args.blastident)
+
+    blast_hits = run_blast(query_genome, ref_fasta, 15, 1000000, bident, tempdir)
     exact_list = []
     exact_dict = {}
     for result in blast_hits:
@@ -630,15 +658,14 @@ def ref_exact_blast(query_genome, ref_fasta, allele_sizes, tempdir):
                     no_hits.remove(allele_hit)  # remove locus from list of no hits
                 allele_no = alignment.hit_def.split(":")[1]  # retreive allele number from full allele name
                 for hsp in alignment.hsps:
-                    if int(hsp.identities) == int(hsp.align_length) and int(hsp.gaps) == 0 and int(hsp.align_length) == int(
-                            allele_sizes[allele_hit]):
+                    if int(hsp.identities) == int(hsp.align_length) and int(hsp.gaps) == 0 and int(hsp.align_length) in \
+                            allele_sizes[allele_hit]:
                         #  if no gaps, matching bases = length of alignment & length is same as input dictionary add to exact
                         exact_list.append(allele_hit)
                         if allele_hit not in exact_dict:
                             exact_dict[allele_hit] = allele_no  # store exact hit in dict
 
     return exact_dict, blast_hits, no_hits
-
 
 
 def run_blast(query_seq, locus_db, wordsize, culling, pident, tempdir):
@@ -697,40 +724,31 @@ def run_blast(query_seq, locus_db, wordsize, culling, pident, tempdir):
     return blast_records
 
 
-
-def get_partial_match_query_region(blast_results, partial_matches, sizes, ref_alleles, qgenome, hsp_ident):
+def get_partial_match_query_region(blast_results, partial_matches, qgenome, hsp_ident, seqs):
     """
-
-    :param blast_results:
-    :param partial_matches: loci without exact matches
-    :param sizes: not used
-    :param ref_alleles:
-    :param qgenome:
-    :param hsp_ident:
-    :return:
-    """
-
-    '''
 
     :param blast_results: blast results
     :param partial_matches: loci without exact matches
     :return: partials dictionary {locus:list of tuples} tuple -> (hsp matching reference allele,query contig where match was found)
     Also writes fasta file of these hits for each locus to be used to blast all alleles of the locus
-    '''
+    """
 
     partials = {}
 
     no_call_reason = {}
 
-    #Combine below loop with finding best hit for each loci - store current best combined bitscore alignment in dict
+    # Combine below loop with finding best hit for each loci - store current best combined bitscore alignment in dict
     # and also store those hsps in partials - if higher score is found then replace in partials.
 
     top_allele_hits = {}
 
+    tophitlocus = {}
+
     for result in blast_results:
         for alignment in result.alignments:
             alignment_locus = alignment.hit_def.rsplit(":")[0]
-            if alignment_locus in partial_matches:# and alignment.hit_def == alignment_locus + ":1":
+            full_subjct = seqs[alignment_locus][alignment.hit_def]
+            if alignment_locus in partial_matches:  # and alignment.hit_def == alignment_locus + ":1":
 
                 # if hsp locus is in partial matches list and allele is "ref" then store this hsp as partial for locus
 
@@ -739,27 +757,43 @@ def get_partial_match_query_region(blast_results, partial_matches, sizes, ref_al
 
                 currentAlignBitscore = 0
                 for hsp in alignment.hsps:
-                    currentAlignBitscore += hsp.score
+                    if hsp_filter_ok(hsp, 100, hsp_ident):
+                        currentAlignBitscore += hsp.score
 
                 if currentAlignBitscore > top_allele_hits[alignment_locus]:
                     top_allele_hits[alignment_locus] = currentAlignBitscore
                     partials[alignment_locus] = []
+
                     for hsp in alignment.hsps:
+                        tophitlocus[alignment_locus] = full_subjct
                         partials[alignment_locus].append((hsp, result.query, alignment.hit_def))
+                # #TODONE sizechange need to keep all hsps but store top hit alignment.hit_def to use for size and
+                # other checking
 
+    # tophitset = sorted(list(tophitlocus.keys()))
+    # partialset = sorted(partial_matches)
+    # print("\n\n")
+    # for i in partialset:
+    #     if i not in tophitset:
+    #         print(i)
+    # print(partialset.difference_update(tophitset))
 
-                    #TODO modify to allow non-"1" alleles to be used for matches - need to get top hitting allele
-                    # this would need the top hit to be retrieved for each - DONE NEEDS TESTING
     rmlis = []
 
     partials2 = {}
 
     # deal with partial overlaps of 2 hsps
-    for locus in partials:
+    for locus in partial_matches:
         hsplis = []
         c = 1
-        ## if 2 or more hsps pass filter but overlap by more that 60% call as 0
-        if len(partials[locus]) > 1:
+        # if 2 or more hsps pass filter but overlap by more that 60% call as 0
+
+        if locus not in tophitlocus:
+            rmlis.append(locus)
+            no_call_reason[locus] = "no_blast_hits"
+            olcheck = "nohit"
+
+        elif len(partials[locus]) > 1:
 
             olcheck = check_for_multiple_ol_partial_hsps(partials[locus], hsp_ident)
 
@@ -772,7 +806,7 @@ def get_partial_match_query_region(blast_results, partial_matches, sizes, ref_al
             locuspartials = partials[locus]
             olcheck = "no overlap"
         if olcheck == "no overlap":
-            locuspartials2 = check_ends_for_snps(locuspartials, ref_alleles[locus], locus, qgenome)
+            locuspartials2 = check_ends_for_snps(locuspartials, tophitlocus[locus], locus, qgenome)
             partials2[locus] = locuspartials
 
             if len(locuspartials2) == 0:
@@ -784,22 +818,63 @@ def get_partial_match_query_region(blast_results, partial_matches, sizes, ref_al
         if locus not in rmlis:
             npartials[locus] = partials2[locus]
 
-    return npartials, no_call_reason
+    return npartials, no_call_reason, tophitlocus
 
 
+def mask_high_snp_regions(locus, recon_locus, ref_locus, window_size, snp_limit):
+    """
+    compare new allele seq to "ref" allele to identify and mask(with Ns) regions with high snp density
+    which can be caused by BLAST errors where indels are present in query seq
 
-def generate_query_allele_seqs(partial_hsps, query_genome, alleles_sizes, missing_perc_cutoff, wordsize, ref_alleles,
-                               qgenome, hsp_thresh, uncallable):
+    :param locus: Not currently used (useful for debug)
+    :param recon_locus: sequence to be checked
+    :param ref_locus: sequence of 'ref' locus
+    :param window_size: size of rolling window to check SNP frequency within
+    :param snp_limit: limit of number of SNPs within that window
+
+    :return: input sequence to be checked with regions with elevated SNP counts masked if necessary
+    """
+
+    if len(recon_locus) != len(ref_locus):  # comparison with reference will break if lengths not the same
+        return recon_locus
+
+    halfwindow = int(window_size / 2)
+    mutpos = []
+    outlocus = list(str(recon_locus))  # Convert test sequence into list of letters
+    for pos in range(len(recon_locus)):
+        if recon_locus[pos] != ref_locus[pos] and recon_locus[pos] not in ["N", "-"] and ref_locus[pos] not in ["N",
+                                                                                                                "-"]:
+            mutpos.append("X")
+            # if the same position doesn't match (i.e. a SNP) and that missmatch is not caused by an N or an indel
+        else:
+            mutpos.append("M")  # If ref and new seq are the same
+
+    #  Get list of ranges allowing for window length over whole locus
+    for x in range(halfwindow, len(ref_locus) - halfwindow):
+        window = mutpos[x - halfwindow:x + halfwindow]  # get window list of Match(M) or SNP(X)
+        if window.count("X") > int(snp_limit):
+            # if num of SNPS greater than limit mask all positions in current window
+            for pos in range(x - halfwindow, x + halfwindow):
+                outlocus[pos] = "N"  # change to N
+    outlocus = "".join(outlocus)
+
+    if outlocus.count("N") > (1 - float(0.8)) * len(ref_locus):
+        print(locus)
+
+    return outlocus
+
+
+def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, wordsize, tophitlocus,
+                               qgenome, hsp_thresh, uncallable,args):
     """
 
     reconstruct allele sequences from hsps that partially cover the locus
 
+    :param tophitlocus: dict containing allele seq with best score for a given locus
     :param partial_hsps: each locus' partially matching hsps
     :param query_genome: path to query genome file
-    :param alleles_sizes: allele sizes dict
     :param missing_perc_cutoff: max amount of locus allowed to be missing as fraction (i.e. 0.8)
     :param wordsize: blast word size
-    :param ref_alleles: allele seqs derived from "reference" (all are allele 1)
     :param qgenome: query genome as dict
     :param hsp_thresh: BLAST identity threshold to pass hsp filter
     :param uncallable: dict - loci called 0 with reason as value
@@ -810,27 +885,25 @@ def generate_query_allele_seqs(partial_hsps, query_genome, alleles_sizes, missin
     q_genome = {}
     calls = {}
 
-    full_allele = ""
-
     for s in query_genome:
         q_genome[s.id] = str(s.seq)
 
     # check that number of identities in blast hits is at least X fraction of normal reference allele length
     # need to check that at least x of allele is covered
-
+    hspcov = 0
     for locus in partial_hsps:
         hspls = partial_hsps[locus]
-        reflen = alleles_sizes[locus + ":1"]
+        reflen = len(tophitlocus[locus])
 
         frac_covered = get_combined_hsp_coverage_of_ref_allele(reflen, hspls, hsp_thresh)  # annotation in function
 
         if frac_covered < float(missing_perc_cutoff):
             uncallable[locus] = "unscorable_too_much_missing"
-
+            hspcov += 1
         hspls = list(remove_hsps_entirely_within_others(hspls, locus, hsp_thresh))
         # removes small hsps within larger ones caused by partial hits to non-orthologous but related genes
 
-        hspls = check_ends_for_snps(hspls, ref_alleles[locus], "", qgenome)  # annotation in function
+        hspls = check_ends_for_snps(hspls, tophitlocus[locus], "", qgenome)  # annotation in function
 
         hspls2 = []
         if len(hspls) == 0:
@@ -885,16 +958,30 @@ def generate_query_allele_seqs(partial_hsps, query_genome, alleles_sizes, missin
 
             calls[locus] = full_allele
 
+    print(hspcov)
+
+    for locus in calls:
+        newseq = str(calls[locus])
+
+        calls[locus] = mask_high_snp_regions(locus, newseq, tophitlocus[locus], args.snpwindow,
+                                             args.densitylim)
+
+    missingperc = 0
     calls2 = dict(calls)
     for locus in calls:
-        if float(len(calls[locus])) > 1.5 * float(
-                alleles_sizes[locus + ":1"]):  # this is not currentlyused but if indels used later will be important
+        reflen = float(len(tophitlocus[locus]))
+        if float(len(
+                calls[locus])) > 1.5 * reflen:  # this is not currentlyused but if indels used later will be important
             uncallable[locus] = "unscorable_too_long"
-        elif calls[locus].count("N") > (1 - float(missing_perc_cutoff)) * float(alleles_sizes[locus + ":1"]):
+        elif calls[locus].count("N") > (1 - float(missing_perc_cutoff)) * reflen:
+            print(locus, reflen, calls[locus].count("N"), (1 - float(missing_perc_cutoff)) * reflen)
             # if too much of locus is missing (replaced/filled in with Ns) call 0
             uncallable[locus] = "unscorable_too_much_missing"
+            missingperc += 1
+
         else:
             calls2[locus] = calls[locus]
+    print("missing:", missingperc)
 
     return calls2, uncallable
 
@@ -926,7 +1013,6 @@ def get_combined_hsp_coverage_of_ref_allele(reflen, hspls, hsp_thresh):
     return fraction_covered
 
 
-
 def merge_intervals(intervals):
     sorted_by_lower_bound = sorted(intervals, key=lambda tup: tup[0])
     merged = []
@@ -943,7 +1029,6 @@ def merge_intervals(intervals):
             else:
                 merged.append(higher)
     return merged
-
 
 
 def hsp_filter_ok(hsp, length, fraction_snps_diff):
@@ -963,7 +1048,6 @@ def hsp_filter_ok(hsp, length, fraction_snps_diff):
         if (float(hsp.identities + hsp.gaps + ncount) / hsp.align_length) > fraction_snps_diff:
             return True
     return False
-
 
 
 def check_ends_for_snps(hsplis, full_subj, locus, qgenome):
@@ -995,7 +1079,8 @@ def check_ends_for_snps(hsplis, full_subj, locus, qgenome):
                 if thsp.query_end < len(contigseq):
                     q_snp = contigseq[thsp.query_end]
                 else:
-                    q_snp = "N"  # if only final nucleotide is deleted from allele add N TODO INDEL record this as a del when dels are included for this and next 3 instances
+                    q_snp = "N"  # if only final nucleotide is deleted from allele add N TODO INDEL record this as a
+                    # del when dels are included for this and next 3 instances
                 s_snp = reverse_complement(subseq[0])
                 nhsp.align_length = nhsp.align_length + 1
                 nhsp.match = nhsp.match + " "
@@ -1056,7 +1141,6 @@ def check_ends_for_snps(hsplis, full_subj, locus, qgenome):
 
     '''
     return nhspls
-
 
 
 def check_split_over_contigs(hspls, query_genome, reflen, locus):
@@ -1160,7 +1244,6 @@ def check_split_over_contigs(hspls, query_genome, reflen, locus):
         return "reconstructed split w ends", full_allele
 
 
-
 def check_mid(contig, hspls, q_genome, wordsize, reflen, locus):
     """
     where two or more partial hsps match same contig
@@ -1257,7 +1340,6 @@ def check_mid(contig, hspls, q_genome, wordsize, reflen, locus):
         return full_allele
 
 
-
 def check_all_orient(hsp_list):
     """
     Check orientation of hsps in list relative to subject ( existing alleles)
@@ -1278,7 +1360,6 @@ def check_all_orient(hsp_list):
         return orient[0]
 
 
-
 def check_matching_overlap(hsp1, hsp2, orient):
     if orient == "positive":
         ol_len = hsp1.sbjct_end - hsp2.sbjct_start
@@ -1292,7 +1373,6 @@ def check_matching_overlap(hsp1, hsp2, orient):
             return "nomatch", ol_len
         else:
             return "match", ol_len
-
 
 
 def remove_indels_from_hsp(hsp):
@@ -1336,7 +1416,6 @@ def remove_indels_from_hsp(hsp):
             seq += unknown_allele[i]
     hsp1.query = seq
     return hsp1
-
 
 
 def check_ends(contig, qstart, qend, sstart, send, reflen, alleleseq, locus):
@@ -1411,9 +1490,7 @@ def check_ends(contig, qstart, qend, sstart, send, reflen, alleleseq, locus):
 
     # if missing flanking region is not all Ns then use original query hit edge - allows for rearrangements/deletions where flanking regions are really gone
 
-
     return full_allele, added_start, added_end
-
 
 
 def check_ends_split_contigs(hsp_start_tup, hsp_end_tup, reflen, alleleseq, locus):
@@ -1529,6 +1606,23 @@ def check_ends_split_contigs(hsp_start_tup, hsp_end_tup, reflen, alleleseq, locu
     return full_allele, added_start, added_end
 
 
+def get_allowed_locus_sizes(locusfile):
+    sizes = {}
+    seqs = {}
+    file = SeqIO.parse(locusfile, "fasta")
+    for allele in file:
+        locus = allele.id.split(":")[0]
+        allelelen = len(allele.seq)
+        if locus not in sizes:
+            sizes[locus] = [allelelen]
+            seqs[locus] = {allele.id: allele.seq}
+        else:
+            seqs[locus][allele.id] = allele.seq
+            if allelelen not in sizes[locus]:
+                sizes[locus].append(allelelen)
+    return sizes, seqs
+
+
 ######## PARTIAL BLAST HIT PROCESSING ########
 
 
@@ -1575,7 +1669,6 @@ def remove_hsps_entirely_within_others(hspls, locus, hsp_thresh):
             nhspls.append(range_d[rang])
 
     if len(nhspls) > 1:
-        # TODONE write section to remove middle hsps like this:[(1, 220), (134, 285), (169, 498)] - i.e. remove (134, 285)
         r2_rangelist = []
         for rang in range_d_new:
             r2_rangelist.append(rang)
@@ -1604,7 +1697,6 @@ def remove_hsps_entirely_within_others(hspls, locus, hsp_thresh):
         return outls
     else:
         return nhspls
-
 
 
 def check_for_multiple_ol_partial_hsps(hspls, hsp_thresh):
@@ -1657,6 +1749,16 @@ def check_for_multiple_ol_partial_hsps(hspls, hsp_thresh):
 
 ######## UTILS ########
 
+def check_deps():
+    deps = []
+
+def is_tool(name):
+    """Check whether `name` is on PATH and marked as executable."""
+
+    # from whichcraft import which
+
+
+    return which(name) is not None
 
 def reverse_complement(dna):
     """
@@ -1668,7 +1770,6 @@ def reverse_complement(dna):
     return ''.join([complement[base] for base in dna[::-1]])
 
 
-
 def largest_nonn_strings(string):
     """
 
@@ -1678,7 +1779,6 @@ def largest_nonn_strings(string):
     matches = re.findall(r"[ATGC]*", string)
     mx = max([len(x) for x in matches])
     return mx
-
 
 
 def check_zp(fq1):
@@ -1697,23 +1797,51 @@ def get_sizes_dict(inf):
     return outd
 
 
-
-def write_outalleles(outpath, reconstructed, ref, uncall, locuslist, mgt1st, no_hits):
+def write_outalleles(outpath, reconstructed, ref, uncall, locuslist, mgt1st, no_hits, serotype):
     outf = open(outpath, "w")
+    outf.write(">{}:{}\n\n".format("species_serotype", serotype))
     outf.write(">{}:{}\n\n".format("7_gene_ST", mgt1st))
-    for fulllocus in locuslist:
-        locus = fulllocus.split(":")[0]
+    call = 0
+    new = {}
+    missing = {}
+    absent = 0
+    for locus in locuslist:
         if locus in ref:
             outf.write(">{}:{}\n\n".format(locus, ref[locus]))
+            call += 1
         elif locus in uncall:
             outf.write(">{}:0_{}\n\n".format(locus, uncall[locus]))
+            if uncall[locus] not in missing:
+                missing[uncall[locus]] = 1
+            else:
+                missing[uncall[locus]] += 1
         elif locus in reconstructed:
+
             outf.write(">{}:new\n{}\n".format(locus, reconstructed[locus]))
+            if "N" in reconstructed[locus]:
+                if "partial" not in new:
+                    new["partial"] = 1
+                else:
+                    new["partial"] += 1
+            else:
+                if "intact" not in new:
+                    new["intact"] = 1
+                else:
+                    new["intact"] += 1
+
         elif locus in no_hits:
             outf.write(">{}:0_{}\n\n".format(locus, "no_blast_hits"))
+            absent += 1
         else:
             outf.write(">{}:0_{}\n\n".format(locus, "no_result"))
             print("MISSING: ", locus)
+            absent += 1
+    print("called:", call)
+    for i in new:
+        print("{}: {}".format(i, new[i]))
+    for i in missing:
+        print("{}: {}".format(i, missing[i]))
+    print("absent:", absent)
     outf.close()
 
 
@@ -1721,111 +1849,4 @@ def write_outalleles(outpath, reconstructed, ref, uncall, locuslist, mgt1st, no_
 
 
 if __name__ == "__main__":
-
-    genome_only = False
-
-    if not genome_only:
-        parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-        parser.add_argument("inputreads",
-                            help="Input paired fastq(.gz) files, comma separated (i.e. name_1.fastq,name_2.fastq )")
-        parser.add_argument("refalleles", help="File path to MGT reference alleles file")
-        parser.add_argument("reflocs", help="File path to MGT allele locations file")
-        parser.add_argument("outpath", help="Path to ouput file name")
-        parser.add_argument("-s", "--species", help="String to find in kraken species confirmation test",
-                            default="Salmonella enterica")
-        parser.add_argument("--no_serotyping", help="Do not run Serotyping of Salmonella using SISTR (ON by default)")
-        parser.add_argument("-y", "--serotype", help="Serotype to match in SISTR, semicolon separated",
-                            default="Typhimurium;I 4,[5],12:i:-")
-        parser.add_argument("-t", "--threads", help="number of computing threads",
-                            default="4")
-        parser.add_argument("-m", "--memory", help="memory available in GB",
-                            default="8")
-        parser.add_argument("-f", "--force", help="overwrite output files with same strain name?", action='store_true')
-        parser.add_argument("--min_largest_contig",
-                            help="Assembly quality filter: minimum allowable length of the largest contig in the assembly in bp",
-                            default=60000)
-        parser.add_argument("--max_contig_no",
-                            help="Assembly quality filter: maximum allowable number of contigs allowed for assembly",
-                            default=700)
-        parser.add_argument("--genome_min",
-                            help="Assembly quality filter: minimum allowable total assembly length in bp",
-                            default=4500000)
-        parser.add_argument("--genome_max",
-                            help="Assembly quality filter: maximum allowable total assembly length in bp",
-                            default=5500000)
-        parser.add_argument("--n50_min",
-                            help="Assembly quality filter: minimum allowable n50 value in bp (default for salmonella)",
-                            default=20000)
-        parser.add_argument("--kraken_db",
-                            help="path for kraken db (if KRAKEN_DEFAULT_DB variable has already been set then ignore)",
-                            default="/srv/scratch/lanlab/kraken_dir/minikraken_20141208")
-        parser.add_argument("--hspident",
-                            help="BLAST percentage identity needed for hsp to be returned",
-                            default=0.98)
-        parser.add_argument("--locusnlimit",
-                            help="minimum proportion of the locus length that must be present (not masked with Ns)",
-                            default=0.80)
-
-        if len(sys.argv) < 5:
-            parser.print_help(sys.stderr)
-            sys.exit(1)
-
-        args = parser.parse_args()
-
-        main(args)
-
-    else:
-        parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-        parser.add_argument("ingenome", help="Input genome")
-        parser.add_argument("refalleles", help="File path to MGT reference alleles file")
-        parser.add_argument("reflocs", help="File path to MGT allele locations file")
-        parser.add_argument("outpath", help="Path to ouput file name")
-
-        parser.add_argument("-s", "--species", help="String to find in kraken species confirmation test",
-                            default="Salmonella enterica")
-        parser.add_argument("--no_serotyping", help="Do not run Serotyping of Salmonella using SISTR (ON by default)")
-        parser.add_argument("-y", "--serotype", help="Serotype to match in SISTR, semicolon separated",
-                            default="Typhimurium;I 4,[5],12:i:-")
-        parser.add_argument("-t", "--threads", help="number of computing threads",
-                            default="4")
-        parser.add_argument("-m", "--memory", help="memory available in GB",
-                            default="8")
-        parser.add_argument("-f", "--force", help="overwrite output files with same strain name?", action='store_true')
-        parser.add_argument("--min_largest_contig",
-                            help="Assembly quality filter: minimum allowable length of the largest contig in the assembly in bp (default for salmonella)",
-                            default=60000)
-        parser.add_argument("--max_contig_no",
-                            help="Assembly quality filter: maximum allowable number of contigs allowed for assembly (default for salmonella)",
-                            default=700)
-        parser.add_argument("--genome_min",
-                            help="Assembly quality filter: minimum allowable total assembly length in bp (default for salmonella)",
-                            default=4500000)
-        parser.add_argument("--genome_max",
-                            help="Assembly quality filter: maximum allowable total assembly length in bp (default for salmonella)",
-                            default=5500000)
-        parser.add_argument("--n50_min",
-                            help="Assembly quality filter: minimum allowable n50 value in bp (default for salmonella)",
-                            default=20000)
-        parser.add_argument("--kraken_db",
-                            help="path for kraken db (if KRAKEN_DEFAULT_DB variable has already been set then ignore)",
-                            default="")
-        parser.add_argument("--hspident",
-                            help="BLAST percentage identity needed for hsp to be returned",
-                            default=0.98)
-        parser.add_argument("--locusnlimit",
-                            help="minimum proportion of the locus length that must be present (not masked with Ns)",
-                            default=0.80)
-
-        if len(sys.argv) < 4:
-            parser.print_help(sys.stderr)
-            sys.exit(1)
-
-        args = parser.parse_args()
-        name = os.path.basename(args.ingenome).strip(".fasta")
-
-        mlst7gene = run_mlst(args.ingenome)
-
-
-        genome_to_alleles(args.ingenome, name, args, mlst7gene)
+    main()

@@ -1,16 +1,16 @@
-name: read2allele
+name: fq_to_allele
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
   - python=3.6.6
-  - shovill=1.0.1
+  - shovill=1.0.9
   - assembly-stats=1.0.1
-  - mlst
+  - mlst=2.10
   - kraken=1.1
   - biopython=1.72
   - mafft=7.407
   - pandas=0.22
   - pip:
-    - sistr_cmd
+    - sistr_cmd==1.0.2
