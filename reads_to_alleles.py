@@ -103,7 +103,7 @@ def get_args():
                         help="Approx size of genome for shovill input in megabases i.e. 5.0 or 2.9", type=float,
                         default=5.0)
     parser.add_argument("--blastident",
-                        help="BLAST percentage identity needed for hsp to be returned",
+                        help="BLAST percentage identity needed for entire alignment to be returned",
                         default=90)
 
     args = parser.parse_args()

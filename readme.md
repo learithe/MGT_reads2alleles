@@ -73,63 +73,76 @@ Run
 
     python /path/to/reads_to_alleles.py -h
 
-	usage: reads_to_alleles.py [-h] [-s SPECIES] [--no_serotyping NO_SEROTYPING]
-				   [-y SEROTYPE] [-t THREADS] [-m MEMORY] [-f]
-				   [--min_largest_contig MIN_LARGEST_CONTIG]
-				   [--max_contig_no MAX_CONTIG_NO]
-				   [--genome_min GENOME_MIN] [--genome_max GENOME_MAX]
-				   [--n50_min N50_MIN] [--kraken_db KRAKEN_DB]
-				   [--hspident HSPIDENT] [--locusnlimit LOCUSNLIMIT]
-				   inputreads refalleles reflocs outpath
+	usage: reads_to_alleles.py [-h] -i INPUTREADS -r REFALLELES -o OUTPATH
+                           [-s SPECIES] [--no_serotyping NO_SEROTYPING]
+                           [-y SEROTYPE] [-t THREADS] [-m MEMORY] [-f]
+                           [--min_largest_contig MIN_LARGEST_CONTIG]
+                           [--max_contig_no MAX_CONTIG_NO]
+                           [--genome_min GENOME_MIN] [--genome_max GENOME_MAX]
+                           [--n50_min N50_MIN] [--kraken_db KRAKEN_DB]
+                           [--hspident HSPIDENT] [--locusnlimit LOCUSNLIMIT]
+                           [--snpwindow SNPWINDOW] [--densitylim DENSITYLIM]
+                           [--refsize REFSIZE] [--blastident BLASTIDENT]
 
-	positional arguments:
-	  inputreads            Input paired fastq(.gz) files, comma separated (i.e.
-				name_1.fastq,name_2.fastq )
-	  refalleles            File path to MGT reference alleles file
-	  reflocs               File path to MGT allele locations file
-	  outpath               Path to ouput file name
-
-	optional arguments:
-	  -h, --help            show this help message and exit
-	  -s SPECIES, --species SPECIES
-				String to find in kraken species confirmation test
-				(default: Salmonella enterica)
-	  --no_serotyping NO_SEROTYPING
-				Do not run Serotyping of Salmonella using SISTR (ON by
-				default) (default: None)
-	  -y SEROTYPE, --serotype SEROTYPE
-				Serotype to match in SISTR, semicolon separated
-				(default: Typhimurium;I 4,[5],12:i:-)
-	  -t THREADS, --threads THREADS
-				number of computing threads (default: 4)
-	  -m MEMORY, --memory MEMORY
-				memory available in GB (default: 8)
-	  -f, --force           overwrite output files with same strain name?
-				(default: False)
-	  --min_largest_contig MIN_LARGEST_CONTIG
-				Assembly quality filter: minimum allowable length of
-				the largest contig in the assembly in bp (default:
-				60000)
-	  --max_contig_no MAX_CONTIG_NO
-				Assembly quality filter: maximum allowable number of
-				contigs allowed for assembly (default: 700)
-	  --genome_min GENOME_MIN
-				Assembly quality filter: minimum allowable total
-				assembly length in bp (default: 4500000)
-	  --genome_max GENOME_MAX
-				Assembly quality filter: maximum allowable total
-				assembly length in bp (default: 5500000)
-	  --n50_min N50_MIN     Assembly quality filter: minimum allowable n50 value
-				in bp (default for salmonella) (default: 20000)
-	  --kraken_db KRAKEN_DB
-				path for kraken db (if KRAKEN_DEFAULT_DB variable has
-				already been set then ignore) (default:
-				/srv/scratch/lanlab/kraken_dir/minikraken_20141208)
-	  --hspident HSPIDENT   BLAST percentage identity needed for hsp to be
-				returned (default: 0.98)
-	  --locusnlimit LOCUSNLIMIT
-				minimum proportion of the locus length that must be
-				present (not masked with Ns) (default: 0.8)
+    optional arguments:
+      -h, --help            show this help message and exit
+      -i INPUTREADS, --inputreads INPUTREADS
+                            Input paired fastq(.gz) files, comma separated (i.e.
+                            name_1.fastq,name_2.fastq ) (default: None)
+      -r REFALLELES, --refalleles REFALLELES
+                            File path to MGT reference allele file. (default:
+                            None)
+      -o OUTPATH, --outpath OUTPATH
+                            Path to ouput file name,required=True (default: None)
+      -s SPECIES, --species SPECIES
+                            String to find in kraken species confirmation test
+                            (default: Salmonella enterica)
+      --no_serotyping NO_SEROTYPING
+                            Do not run Serotyping of Salmonella using SISTR (ON by
+                            default) (default: None)
+      -y SEROTYPE, --serotype SEROTYPE
+                            Serotype to match in SISTR, semicolon separated
+                            (default: Typhimurium;I 4,[5],12:i:-)
+      -t THREADS, --threads THREADS
+                            number of computing threads (default: 4)
+      -m MEMORY, --memory MEMORY
+                            memory available in GB (default: 8)
+      -f, --force           overwrite output files with same strain name?
+                            (default: False)
+      --min_largest_contig MIN_LARGEST_CONTIG
+                            Assembly quality filter: minimum allowable length of
+                            the largest contig in the assembly in bp (default:
+                            60000)
+      --max_contig_no MAX_CONTIG_NO
+                            Assembly quality filter: maximum allowable number of
+                            contigs allowed for assembly (default: 700)
+      --genome_min GENOME_MIN
+                            Assembly quality filter: minimum allowable total
+                            assembly length in bp (default: 4500000)
+      --genome_max GENOME_MAX
+                            Assembly quality filter: maximum allowable total
+                            assembly length in bp (default: 5500000)
+      --n50_min N50_MIN     Assembly quality filter: minimum allowable n50 value
+                            in bp (default for salmonella) (default: 20000)
+      --kraken_db KRAKEN_DB
+                            path for kraken db (if KRAKEN_DEFAULT_DB variable has
+                            already been set then ignore) (default:
+                            /srv/scratch/lanlab/kraken_dir/minikraken_20141208)
+      --hspident HSPIDENT   BLAST percentage identity needed for hsp to be
+                            returned (default: 0.98)
+      --locusnlimit LOCUSNLIMIT
+                            minimum proportion of the locus length that must be
+                            present (not masked with Ns) (default: 0.8)
+      --snpwindow SNPWINDOW
+                            Size of sliding window to screen for overly dense SNPs
+                            (default: 40)
+      --densitylim DENSITYLIM
+                            maximum number of SNPs allowed to be present in window
+                            before window is masked (default: 4)
+      --refsize REFSIZE     Approx size of genome for shovill input in megabases
+                            i.e. 5.0 or 2.9 (default: 5.0)
+      --blastident BLASTIDENT
+                            BLAST percentage identity needed for entire alignment to be returned (default: 90)
 
 
 
@@ -140,11 +153,11 @@ Examples
 
 running strain 1234 against salmonella typhimurium MGT with 8 cores and 30gb RAM
 
-    python /path/to/reads_to_alleles.py 1234_1.fastq.gz,1234_2.fastq.gz MGT_alleles_file locus_position_file output_file_name --serotype "Typhimurium;I 4,[5],12:i:-" --species "Salmonella enterica" -t 8 -m 30
+    python /path/to/reads_to_alleles.py -i 1234_1.fastq.gz,1234_2.fastq.gz -r MGT_alleles_file -o output_file_name --serotype "Typhimurium;I 4,[5],12:i:-" --species "Salmonella enterica" -t 8 -m 30
 
 **example2:**
 
 running strain abcd against vibrio cholerae MGT with 4 cores and 50gb RAM
 (serotyping is currently only for Salmonella)
 
-    python /path/to/reads_to_alleles.py abcd_1.fastq.gz,abcd_2.fastq.gz MGT_alleles_file locus_position_file output_file_name --no_serotyping --species "Vibrio cholerae" -t 4 -m 50
+    python /path/to/reads_to_alleles.py -i abcd_1.fastq.gz,abcd_2.fastq.gz -r MGT_alleles_file -o output_file_name --no_serotyping --species "Vibrio cholerae" -t 4 -m 50
