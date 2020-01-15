@@ -71,19 +71,24 @@ def get_args():
     parser.add_argument("-f", "--force", help="overwrite output files with same strain name?", action='store_true')
     parser.add_argument("--min_largest_contig",
                         help="Assembly quality filter: minimum allowable length of the largest contig in the assembly in bp",
-                        default=60000)
+                        default=60000,
+                        type=int)
     parser.add_argument("--max_contig_no",
                         help="Assembly quality filter: maximum allowable number of contigs allowed for assembly",
-                        default=700)
+                        default=700,
+                        type=int)
     parser.add_argument("--genome_min",
                         help="Assembly quality filter: minimum allowable total assembly length in bp",
-                        default=4500000)
+                        default=4500000,
+                        type=int)
     parser.add_argument("--genome_max",
                         help="Assembly quality filter: maximum allowable total assembly length in bp",
-                        default=5500000)
+                        default=5500000,
+                        type=int)
     parser.add_argument("--n50_min",
                         help="Assembly quality filter: minimum allowable n50 value in bp (default for salmonella)",
-                        default=20000)
+                        default=20000,
+                        type=int)
     parser.add_argument("--kraken_db",
                         help="path for kraken db (if KRAKEN_DEFAULT_DB variable has already been set then ignore)",
                         default="/srv/scratch/lanlab/kraken_dir/minikraken_20141208")
