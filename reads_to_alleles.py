@@ -61,7 +61,7 @@ def get_args():
     parser.add_argument("-o", "--outpath", help="Path to ouput file name,required=True", required=True)
     parser.add_argument("-s", "--species", help="String to find in kraken species confirmation test",
                         default="Salmonella enterica")
-    parser.add_argument("--no_serotyping", help="Do not run Serotyping of Salmonella using SISTR (ON by default)")
+    parser.add_argument("--no_serotyping", help="Do not run Serotyping of Salmonella using SISTR (ON by default)", action='store_true')
     parser.add_argument("-y", "--serotype", help="Serotype to match in SISTR, semicolon separated",
                         default="Typhimurium;I 4,[5],12:i:-")
     parser.add_argument("-t", "--threads", help="number of computing threads",
