@@ -753,7 +753,11 @@ def get_partial_match_query_region(blast_results, partial_matches, qgenome, hsp_
         for alignment in result.alignments:
             alignment_locus = alignment.hit_def.rsplit(":")[0]
             full_subjct = seqs[alignment_locus][alignment.hit_def]
-            if alignment_locus in partial_matches:  # and alignment.hit_def == alignment_locus + ":1":
+
+            if alignment_locus not in partials:
+                partials[alignment_locus] = []
+
+            if alignment_locus in partial_matches:# and alignment.hit_def == alignment_locus + ":1":
 
                 # if hsp locus is in partial matches list and allele is "ref" then store this hsp as partial for locus
 
@@ -767,10 +771,10 @@ def get_partial_match_query_region(blast_results, partial_matches, qgenome, hsp_
 
                 if currentAlignBitscore > top_allele_hits[alignment_locus]:
                     top_allele_hits[alignment_locus] = currentAlignBitscore
-                    partials[alignment_locus] = []
+                    tophitlocus[alignment_locus] = full_subjct
 
-                    for hsp in alignment.hsps:
-                        tophitlocus[alignment_locus] = full_subjct
+                for hsp in alignment.hsps:
+                    if hsp_filter_ok(hsp, 100, hsp_ident):
                         partials[alignment_locus].append((hsp, result.query, alignment.hit_def))
                 # #TODONE sizechange need to keep all hsps but store top hit alignment.hit_def to use for size and
                 # other checking
@@ -979,7 +983,7 @@ def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, 
                 calls[locus])) > 1.5 * reflen:  # this is not currentlyused but if indels used later will be important
             uncallable[locus] = "unscorable_too_long"
         elif calls[locus].count("N") > (1 - float(missing_perc_cutoff)) * reflen:
-            print(locus, reflen, calls[locus].count("N"), (1 - float(missing_perc_cutoff)) * reflen)
+            #print(locus, reflen, calls[locus].count("N"), (1 - float(missing_perc_cutoff)) * reflen)
             # if too much of locus is missing (replaced/filled in with Ns) call 0
             uncallable[locus] = "unscorable_too_much_missing"
             missingperc += 1
@@ -1050,7 +1054,7 @@ def hsp_filter_ok(hsp, length, fraction_snps_diff):
         if hsp.query[pos] == "N" or hsp.sbjct[pos] == "N":
             ncount += 1
     if hsp.align_length > length:
-        if (float(hsp.identities + hsp.gaps + ncount) / hsp.align_length) > fraction_snps_diff:
+        if (float(hsp.identities + hsp.gaps + ncount) / hsp.align_length) > float(fraction_snps_diff):
             return True
     return False
 
@@ -1207,14 +1211,16 @@ def check_split_over_contigs(hspls, query_genome, reflen, locus):
             if next_hsp.sbjct_start > next_hsp.sbjct_end:
                 next_query = reverse_complement(next_query)
 
-            end_cur = cur_query[-1 * (overlap + 1):]
+            olstart = -1 * (overlap + 1)
+            end_cur = cur_query[olstart:]
 
             start_next = next_query[:overlap + 1]
 
             if end_cur == start_next:
                 newseq += next_query[overlap + 1:]
             else:
-                return "inconsistent_overlap", ""
+                newseq = newseq[:olstart] + "N"*overlap + next_query[overlap + 1:]
+                # return "inconsistent_overlap", ""
 
             # check overlap for identity
 
@@ -1274,7 +1280,7 @@ def check_mid(contig, hspls, q_genome, wordsize, reflen, locus):
         order = {}
         for tup in hspls:
             hsp = tup[0]
-            order[hsp.query_start] = hsp
+            order[hsp.sbjct_start] = hsp
 
         sorted_hsps = sorted(map(int, order.keys()))
 
@@ -1293,16 +1299,20 @@ def check_mid(contig, hspls, q_genome, wordsize, reflen, locus):
                 hspnext = order[sorted_hsps[start + 1]]
 
                 ## end of one hsp and start of next = mid_section
-                mid_section_st = int(hsp.query_end)
-                mid_section_en = int(hspnext.query_start)
+                mid_section_st = int(hsp.sbjct_end)
+                mid_section_en = int(hspnext.sbjct_start)
 
                 if mid_section_en < mid_section_st:
 
                     # if mid hspA and B overlap then get length to ignore in hspB start
-                    olcheck, ollen = check_matching_overlap(hsp, hspnext, "negative")
+                    olcheck, ollen = check_matching_overlap(hsp, hspnext, "positive")
                     hspnext = remove_indels_from_hsp(hspnext)
-                    add = q_genome[contig][hspnext.query_start + ollen:hspnext.query_end - 1]
-                    full_allele = full_allele + add
+                    if olcheck == "nomatch":
+                        add = q_genome[contig][hspnext.query_start + ollen:hspnext.query_end]
+                        full_allele = full_allele[:-1*ollen] + "N"*ollen + add
+                    else:
+                        add = q_genome[contig][hspnext.query_start + ollen:hspnext.query_end]
+                        full_allele = full_allele + add
 
                 else:
 
@@ -1322,13 +1332,17 @@ def check_mid(contig, hspls, q_genome, wordsize, reflen, locus):
             for start in range(len(sorted_hsps) - 1):
                 hsp = order[sorted_hsps[start]]
                 hspnext = order[sorted_hsps[start + 1]]
-                mid_section_st = int(hsp.query_end)
-                mid_section_en = int(hspnext.query_start)
+                mid_section_st = int(hsp.sbjct_end)
+                mid_section_en = int(hspnext.sbjct_start)
                 if mid_section_en < mid_section_st:
                     olcheck, ollen = check_matching_overlap(hsp, hspnext, "negative")
                     hspnext = remove_indels_from_hsp(hspnext)
-                    add = q_genome[contig][hspnext.query_start + ollen:hspnext.query_end - 1]
-                    full_allele = add + full_allele
+                    if olcheck == "nomatch":
+                        add = q_genome[contig][hspnext.query_start + ollen:hspnext.query_end]
+                        full_allele = full_allele[:-1*ollen] + "N"*ollen + add
+                    else:
+                        add = q_genome[contig][hspnext.query_start + ollen:hspnext.query_end]
+                        full_allele = full_allele + add
                     # mid_section_seq = "N" * (hsp.sbjct_end - hspnext.sbjct_start-1)
                 else:
                     mid_section_seq = "N" * (hsp.sbjct_end - hspnext.sbjct_start - 1)
