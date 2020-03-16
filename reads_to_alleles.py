@@ -973,7 +973,7 @@ def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, 
 
             calls[locus] = full_allele
 
-    print(hspcov)   # JD   QUESTION: what exactly is this value & why do we want to see it printed?
+    print("hspcov: ", hspcov)
 
     for locus in calls:
         newseq = str(calls[locus])
@@ -986,7 +986,7 @@ def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, 
     for locus in calls:
         reflen = float(len(tophitlocus[locus]))
         if float(len(
-                calls[locus])) > 1.5 * reflen:  # this is not currentlyused but if indels used later will be important
+                calls[locus])) > 1.5 * reflen:  # this is not currently used but if indels used later will be important
             uncallable[locus] = "unscorable_too_long"
         elif calls[locus].count("N") > (1 - float(missing_perc_cutoff)) * reflen:
             #print(locus, reflen, calls[locus].count("N"), (1 - float(missing_perc_cutoff)) * reflen)
@@ -996,7 +996,7 @@ def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, 
 
         else:
             calls2[locus] = calls[locus]
-    print("percent missing:", missingperc)
+    print("missingperc:", missingperc)
 
     return calls2, uncallable
 
