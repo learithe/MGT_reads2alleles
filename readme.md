@@ -74,8 +74,7 @@ Run
     python /path/to/reads_to_alleles.py -h
 
 	usage: reads_to_alleles.py [-h] -i INPUTREADS -r REFALLELES -o OUTPATH
-                           [-s SPECIES] [--strainid STRAINID]
-                           [--no_serotyping NO_SEROTYPING]
+                           [-s SPECIES] [--no_serotyping NO_SEROTYPING]
                            [-y SEROTYPE] [-t THREADS] [-m MEMORY] [-f]
                            [--min_largest_contig MIN_LARGEST_CONTIG]
                            [--max_contig_no MAX_CONTIG_NO]
@@ -84,7 +83,7 @@ Run
                            [--hspident HSPIDENT] [--locusnlimit LOCUSNLIMIT]
                            [--snpwindow SNPWINDOW] [--densitylim DENSITYLIM]
                            [--refsize REFSIZE] [--blastident BLASTIDENT]
-                           [--skip_speciescheck SKIP_SPECIESCHECK]
+                           [--skip_speciescheck] [--strainid STRAINID]
 
     optional arguments:
       -h, --help            show this help message and exit
