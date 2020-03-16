@@ -147,10 +147,10 @@ Run
                             i.e. 5.0 or 2.9 (default: 5.0)
       --blastident BLASTIDENT
                             BLAST percentage identity needed for entire alignment to be returned (default: 90)
-      --skip_speciescheck SKIP_SPECIESCHECK
-                            Skip the kraken species QC step. WARNING: ONLY use this if
-                            you've already done this QC step on the reads as part of
-                            another QC process! (default: False)  
+      --skip_speciescheck   override kraken species check step (ONLY DO THIS IF
+                            YOU'VE ALREADY DONE A QC CHECK) (default: False)  
+      --strainid STRAINID   specify a strain name (overrides default extraction
+                            from read names) (default: False)
 
 
 Examples
