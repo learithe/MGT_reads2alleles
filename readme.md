@@ -80,10 +80,12 @@ Run
                            [--max_contig_no MAX_CONTIG_NO]
                            [--genome_min GENOME_MIN] [--genome_max GENOME_MAX]
                            [--n50_min N50_MIN] [--kraken_db KRAKEN_DB]
+                           [--kraken_report KRAKEN_REPORT]  
                            [--hspident HSPIDENT] [--locusnlimit LOCUSNLIMIT]
                            [--snpwindow SNPWINDOW] [--densitylim DENSITYLIM]
                            [--refsize REFSIZE] [--blastident BLASTIDENT]
                            [--skip_speciescheck] [--strainid STRAINID]
+                           [--kraken_report KRAKEN_REPORT]
 
     optional arguments:
       -h, --help            show this help message and exit
@@ -132,6 +134,9 @@ Run
                             path for kraken db (if KRAKEN_DEFAULT_DB variable has
                             already been set then ignore) (default:
                             /srv/scratch/lanlab/kraken_dir/minikraken_20141208)
+      --kraken_report KRAKEN_REPORT
+                            path to PRE-EXISTING kraken report file to use for
+                            the species check step (will skip kraken run) (default: None)
       --hspident HSPIDENT   BLAST percentage identity needed for hsp to be
                             returned (default: 0.98)
       --locusnlimit LOCUSNLIMIT

@@ -93,6 +93,8 @@ def get_args():
     parser.add_argument("--kraken_db",
                         help="path for kraken db (if KRAKEN_DEFAULT_DB variable has already been set then ignore)",
                         default="/srv/scratch/lanlab/kraken_dir/minikraken_20141208")
+    parser.add_argument("--kraken_report",
+                        help="path to PRE-EXISTING kraken report file to use for the species check step (will skip kraken run)")
     parser.add_argument("--hspident",
                         help="BLAST percentage identity needed for hsp to be returned",
                         default=0.98, type=float)
@@ -113,11 +115,9 @@ def get_args():
                         default=90)
     parser.add_argument("--skip_speciescheck",
                         help="override kraken species check step (ONLY DO THIS IF YOU'VE ALREADY DONE A QC CHECK)",
-                        default=False,
                         action='store_true')
     parser.add_argument("--strainid",
-                        help="specify a strain name (overrides default extraction from read names)",
-                        default=False)
+                        help="specify a strain name (overrides default extraction from read names)")
 
     args = parser.parse_args()
 
@@ -198,6 +198,7 @@ def run_assemblypipe(args):
     #else:
     #    os.mkdir(basename)
 
+
     krakenout1 = basename + "/" + strain + "_kraken_out"
     rename_skesa = basename + "/" + strain + "_contigs.fa"
     assembly_fail = basename + "/" + strain + "_fail_assembly.fa"
@@ -267,7 +268,8 @@ def check_kraken(krakenout, target_species):
     :return: either Species name = contamination is >10%, False = no contamination (>10%)
     """
     contam = True
-    krakenout = krakenout.decode('utf8')
+    if not isinstance(krakenout, str): krakenout = krakenout.decode('utf8')
+
     for line in krakenout.split("\n"):
         col = line.split("\t")
         if len(col) > 5:
@@ -404,46 +406,57 @@ def run_mlst(ingenome):
 def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
     ## set KRAKEN_DEFAULT_DB variable to kraken_db input variable
 
-    if args.kraken_db != "":
-        environ["KRAKEN_DEFAULT_DB"] = args.kraken_db
+    if not args.kraken_report:
+
+        print("[" + get_timestamp() + "] Checking for species contamination with Kraken.")
+
+        if args.kraken_db != "":
+            environ["KRAKEN_DEFAULT_DB"] = args.kraken_db
+        else:
+            test = subprocess.Popen('echo $KRAKEN_DEFAULT_DB', shell=True, stdout=subprocess.PIPE)
+            if test.communicate()[0] == b'\n':
+                sys.exit(
+                    "A Kraken database location must either be defined using --kraken_db\n or set as an environmental valiable ( export $KRAKEN_DEFAULT_DB=/path/to/dbfolder )")
+
+        #### Run kraken ####
+
+        if check_zp(fq1):
+            kraken_cmd = 'kraken --threads {} --fastq-input --gzip-compressed --output {} --paired {} {}'.format(
+                str(args.threads),
+                krakenout1,
+                fq1, fq2)
+        else:
+            kraken_cmd = 'kraken --threads {} --fastq-input --output {} --paired {} {}'.format(str(args.threads),
+                                                                                               krakenout1, fq1,
+                                                                                               fq2)
+
+        subprocess.Popen(kraken_cmd, shell=True).wait()
+
+        kraken_report_cmd = 'kraken-report ' + krakenout1
+
+        proc = subprocess.Popen(kraken_report_cmd, stdout=subprocess.PIPE, shell=True)
+
+        kraken_result = proc.stdout.read()
+
+        krakenReport = open(krakenout1 + "_report.txt", "w")
+
+        kraken_out = kraken_result.decode('utf8')
+
+        krakenReport.write(kraken_out)
+
+        krakenReport.close()
+
+        os.remove(krakenout1)
+
+        contamination = check_kraken(kraken_result, args.species)
+        # takes kraken_report file and checks for presence of 'species string' and any contaminants above 10% of reads
     else:
-        test = subprocess.Popen('echo $KRAKEN_DEFAULT_DB', shell=True, stdout=subprocess.PIPE)
-        if test.communicate()[0] == b'\n':
-            sys.exit(
-                "A Kraken database location must either be defined using --kraken_db\n or set as an environmental valiable ( export $KRAKEN_DEFAULT_DB=/path/to/dbfolder )")
+        print("[" + get_timestamp() + "] Checking for species contamination using pre-existing Kraken report file: ", args.kraken_report)
+        with open(args.kraken_report, "r") as f:
+            kraken_result = f.read()
 
-    #### Run kraken ####
+        contamination = check_kraken(kraken_result, args.species)
 
-    if check_zp(fq1):
-        kraken_cmd = 'kraken --threads {} --fastq-input --gzip-compressed --output {} --paired {} {}'.format(
-            str(args.threads),
-            krakenout1,
-            fq1, fq2)
-    else:
-        kraken_cmd = 'kraken --threads {} --fastq-input --output {} --paired {} {}'.format(str(args.threads),
-                                                                                           krakenout1, fq1,
-                                                                                           fq2)
-
-    subprocess.Popen(kraken_cmd, shell=True).wait()
-
-    kraken_report_cmd = 'kraken-report ' + krakenout1
-
-    proc = subprocess.Popen(kraken_report_cmd, stdout=subprocess.PIPE, shell=True)
-
-    kraken_result = proc.stdout.read()
-
-    krakenReport = open(krakenout1 + "_report.txt", "w")
-
-    kraken_out = kraken_result.decode('utf8')
-
-    krakenReport.write(kraken_out)
-
-    krakenReport.close()
-
-    os.remove(krakenout1)
-
-    contamination = check_kraken(kraken_result, args.species)
-    # takes kraken_report file and checks for presence of 'species string' and any contaminants above 10% of reads
 
     if contamination == True:
         outc = open(contam, "w")
@@ -459,6 +472,8 @@ def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
         outc.write(kraken_out)
         outc.close()
         sys.exit(outmessage)
+    else:
+        print("[" + get_timestamp() + "] Kraken species check passed.")
 
 
 def run_shovill(args, fq1, fq2, script_path, shovil_pref, skesa_assembly, rename_skesa):
