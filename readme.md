@@ -85,7 +85,6 @@ Run
                            [--snpwindow SNPWINDOW] [--densitylim DENSITYLIM]
                            [--refsize REFSIZE] [--blastident BLASTIDENT]
                            [--skip_speciescheck] [--strainid STRAINID]
-                           [--kraken_report KRAKEN_REPORT]
 
     optional arguments:
       -h, --help            show this help message and exit
