@@ -46,6 +46,7 @@ def main():
 
     genome_to_alleles(query_genome, strainid, args, mgt1st, serotype)
 
+
 ######## ARGS ########
 
 def get_args():
@@ -110,6 +111,13 @@ def get_args():
     parser.add_argument("--blastident",
                         help="BLAST percentage identity needed for entire alignment to be returned",
                         default=90)
+    parser.add_argument("--skip_speciescheck",
+                        help="override kraken species check step (ONLY DO THIS IF YOU'VE ALREADY DONE A QC CHECK)",
+                        default=False,
+                        action='store_true')
+    parser.add_argument("--strainid",
+                        help="specify a strain name (overrides default extraction from read names)",
+                        default=False)
 
     args = parser.parse_args()
 
@@ -135,7 +143,7 @@ Takes raw reads (fastq or fastq.gz) and runs assembly pipeline:
  runs assembly-stats to gather stats to compare to assembly quality limits in inputs
  runs SISTR to verify serovar of genome based on input serotype (salmonella only)
  runs mlst to get 7 gene MLST ST
- 
+
 """
 
 
@@ -165,32 +173,30 @@ def run_assemblypipe(args):
     if len(reads) != 2:
         sys.exit("Two files must be provided one for forward and one for reverse reads (.gz is supported)")
 
-    readpref = commonprefix(reads)
-
-    if readpref == "":
-        strain = fq1.split("/")[-1].split(".fastq")[0]
+    if args.strainid == False:
+        readpref = commonprefix(reads)
+        if readpref == "":
+            strain = fq1.split("/")[-1].split(".fastq")[0]
+        else:
+            strain = str(readpref.split("/")[-1][:-1])
     else:
-        strain = str(readpref.split("/")[-1][:-1])
+        strain = args.strainid
 
     ## make tmp folder based on strain name - with check for overwrite
-
-    now = datetime.datetime.now()
-    timestamp = now.strftime("%H:%M:%S")
-
-    print("[" + timestamp + "] MGT fastq to genome pipeline started for strain: " + strain)
+    print("[" + get_timestamp() + "] MGT fastq to genome pipeline started for strain: " + strain)
 
     pref = args.outpath
 
     basename = pref + strain
 
-    if os.path.exists(basename):
-        if force:
-            shutil.rmtree(basename)
-            os.mkdir(basename)
-        else:
-            sys.exit("\nStrain with this name already has temp or output files. Use -f/--force flag to overwrite\n")
-    else:
-        os.mkdir(basename)
+    #if os.path.exists(basename):
+    #    if force:
+    #        shutil.rmtree(basename)
+    #        os.mkdir(basename)
+    #    else:
+    #        sys.exit("\nStrain with this name already has temp or output files. Use -f/--force flag to overwrite\n")
+    #else:
+    #    os.mkdir(basename)
 
     krakenout1 = basename + "/" + strain + "_kraken_out"
     rename_skesa = basename + "/" + strain + "_contigs.fa"
@@ -205,9 +211,11 @@ def run_assemblypipe(args):
     shovil_pref = basename + "/" + strain + "_shovill"
     skesa_assembly = shovil_pref + "/contigs.fa"
 
+
     ##### Run kraken #####
 
-    run_kraken(args, fq1, fq2, krakenout1, strain, contam)
+    if not args.skip_speciescheck:  run_kraken(args, fq1, fq2, krakenout1, strain, contam)
+
 
     ##### Run shovill #####
 
@@ -215,7 +223,7 @@ def run_assemblypipe(args):
 
     """
     replace assembly-stats with quast when/if quast isn't awful on conda:
-    
+
     os.mkdir(quast_out)
 
     quast_cmd = "quast.py -t {} --glimmer {} -o {}".format(cpus,rename_skesa,quast_out)
@@ -229,6 +237,7 @@ def run_assemblypipe(args):
 
     run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_stats,args)
 
+
     ##### Run SISTR serotyping #####
     serotype = ""
     if args.no_serotyping:
@@ -236,15 +245,16 @@ def run_assemblypipe(args):
     else:
         serotype = run_sistr(args, rename_skesa, strain, sistr_out, contam, serovar_fail)
 
-    ##### Run 7 gene MLST program #####
 
+    ##### Run 7 gene MLST program #####
     MGT1ST = run_mlst(rename_skesa)
 
+
+    ##### Cleanup and return from pipe
     shutil.copy(rename_skesa, skesa_pass)  # if no sys.exit by this point then genome has passed filters
 
     elapsed_time = time.time() - start_time
-
-    print("Assembly completed in: ", elapsed_time)
+    print("[" + get_timestamp() + "] Assembly and QC pipeline completed in: ", elapsed_time)
 
     return skesa_pass, strain, MGT1ST, serotype
 
@@ -453,7 +463,7 @@ def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
 
 def run_shovill(args, fq1, fq2, script_path, shovil_pref, skesa_assembly, rename_skesa):
     ##TODO work out shovill inclusion / dependencies
-
+    print("[" + get_timestamp() + "] Beginning shovill assembly.")
     shovill_cmd = script_path + "/shovill_cmd/bin/shovill_15cov -R1 {} -R2 {} --gsize {}M --outdir {} --cpus {} --ram {} --assembler skesa --force".format(
         fq1, fq2, args.refsize, shovil_pref, args.threads, args.memory)
 
@@ -466,6 +476,7 @@ def run_assembly_stats(rename_skesa, contam, assembly_fail, strain, assembly_sta
     """
     run assembly-stats and pass results to assem_filter() if fails for 1 or more reasons sys.exit with reasons for fail
     """
+    print("[" + get_timestamp() + "] Determining assembly stats.")
 
     assem_cmd = "assembly-stats {}".format(rename_skesa)
 
@@ -494,6 +505,7 @@ def run_sistr(args, rename_skesa, strain, sistr_out, contam, serovar_fail):
     """
     run sistr and pass results to sistr_filter if not the correct serovar sys.exit out
     """
+    print("[" + get_timestamp() + "] Running SISTR to verify serovar.")
 
     sistr_cmd = "sistr -i {} {} -f csv -o {} -t {}".format(rename_skesa, strain, sistr_out, args.threads)
 
@@ -540,9 +552,9 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st, serotype):
     :return: writes alleles,zero calls,7geneMLST to output file
     """
     start_time = time.time()
+    print("\n[" + get_timestamp() + "] Beginning MGT allele calling.")
 
     # test_locus = "STM4037"
-    print("Parsing inputs\n")
     # script_path = sys.path[0]
 
     if args.refalleles:
@@ -559,11 +571,8 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st, serotype):
     ####
 
     pref = args.outpath
-
     outdir = pref + strain_name
-
     outfile = outdir + "/" + strain_name + "_alleles.fasta"
-
     tempdir = outdir + "/tmp"
 
     if os.path.exists(outdir):
@@ -576,6 +585,8 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st, serotype):
         os.mkdir(tempdir)
     else:
         os.mkdir(tempdir)
+
+    print("Parsing inputs")
 
     qgenomeseq = SeqIO.parse(query_genome, "fasta")
 
@@ -591,10 +602,9 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st, serotype):
     alleles_called_ref, ref_blast_hits, no_hits = ref_exact_blast(query_genome, ref_alleles_in, locus_allowed_size,
                                                                   tempdir,args)
 
-    print(no_hits)
-
-    print("Exact matches found: {}\n".format(len(alleles_called_ref.keys())))
-    print("Processing partial BLAST hits\n")
+    print("Loci with no hits:", no_hits)
+    print("Exact matches found: {}".format(len(alleles_called_ref.keys())))
+    print("\nProcessing partial BLAST hits")
 
     partial_loci = list(locus_list)  # list of all loci
 
@@ -614,17 +624,13 @@ def genome_to_alleles(query_genome, strain_name, args, mgt1st, serotype):
                                                            wordsize, tophitlocus, qgenome, hsp_ident_thresh, uncallable,
                                                            args)
 
-    print("Writing outputs\n")
+    print("\nWriting outputs\n")
     write_outalleles(outfile, reconstructed, alleles_called_ref, uncallable, locus_list, mgt1st, no_hits, serotype)
 
     elapsed_time = time.time() - start_time
 
-    print("Allele calling completed in: ", elapsed_time)
-
-    now = datetime.datetime.now()
-    timestamp = now.strftime("%H:%M:%S")
-
-    print("[" + timestamp + "] MGT fastq to alleles pipeline complete for strain: " + strain_name)
+    print("\nAllele calling completed in: ", elapsed_time)
+    print("[" + get_timestamp() + "] MGT fastq to alleles pipeline complete for strain: " + strain_name + "\n")
 
 
 def ref_exact_blast(query_genome, ref_fasta, allele_sizes, tempdir,args):
@@ -718,8 +724,8 @@ def run_blast(query_seq, locus_db, wordsize, culling, pident, tempdir):
 
     remove(tmp_out)
     """
-    blast_records structure: 
-    list of results (if multifasta input, one result per fasta seq) 
+    blast_records structure:
+    list of results (if multifasta input, one result per fasta seq)
 
     result attributes: >>>'alignments'<<<, 'application', 'blast_cutoff', 'database', 'database_length', 'database_letters', 'database_name', 'database_sequences', 'date', 'descriptions', 'dropoff_1st_pass', 'effective_database_length', 'effective_hsp_length', 'effective_query_length', 'effective_search_space', 'effective_search_space_used', 'expect', 'filter', 'frameshift', 'gap_penalties', 'gap_trigger', 'gap_x_dropoff', 'gap_x_dropoff_final', 'gapped', 'hsps_gapped', 'hsps_no_gap', 'hsps_prelim_gapped', 'hsps_prelim_gapped_attemped', 'ka_params', 'ka_params_gap', 'matrix', 'multiple_alignment', 'num_good_extends', 'num_hits', 'num_letters_in_database', 'num_seqs_better_e', 'num_sequences', 'num_sequences_in_database', 'posted_date', 'query', 'query_id', 'query_length', 'query_letters', 'reference', 'sc_match', 'sc_mismatch', 'threshold', 'version', 'window_size']
         alignment attributes: 'accession', 'hit_def', 'hit_id', >>>'hsps'<<<, 'length', 'title']
@@ -967,7 +973,7 @@ def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, 
 
             calls[locus] = full_allele
 
-    print(hspcov)
+    print(hspcov)   # JD   QUESTION: what exactly is this value & why do we want to see it printed?
 
     for locus in calls:
         newseq = str(calls[locus])
@@ -990,7 +996,7 @@ def generate_query_allele_seqs(partial_hsps, query_genome, missing_perc_cutoff, 
 
         else:
             calls2[locus] = calls[locus]
-    print("missing:", missingperc)
+    print("percent missing:", missingperc)
 
     return calls2, uncallable
 
@@ -1141,7 +1147,7 @@ def check_ends_for_snps(hsplis, full_subj, locus, qgenome):
         nhspls.append((nhsp, contig, allele))
 
     '''
-    blast hits structure: 
+    blast hits structure:
     list of results
 
     result attributes: >>>'alignments'<<<, 'application', 'blast_cutoff', 'database', 'database_length', 'database_letters', 'database_name', 'database_sequences', 'date', 'descriptions', 'dropoff_1st_pass', 'effective_database_length', 'effective_hsp_length', 'effective_query_length', 'effective_search_space', 'effective_search_space_used', 'expect', 'filter', 'frameshift', 'gap_penalties', 'gap_trigger', 'gap_x_dropoff', 'gap_x_dropoff_final', 'gapped', 'hsps_gapped', 'hsps_no_gap', 'hsps_prelim_gapped', 'hsps_prelim_gapped_attemped', 'ka_params', 'ka_params_gap', 'matrix', 'multiple_alignment', 'num_good_extends', 'num_hits', 'num_letters_in_database', 'num_seqs_better_e', 'num_sequences', 'num_sequences_in_database', 'posted_date', 'query', 'query_id', 'query_length', 'query_letters', 'reference', 'sc_match', 'sc_mismatch', 'threshold', 'version', 'window_size']
@@ -1493,13 +1499,13 @@ def check_ends(contig, qstart, qend, sstart, send, reflen, alleleseq, locus):
         '''
         # new_qstart = int(qstart) - int(sstart)
         # new_qend = int(qend) + (reflen - int(send) - 1)
-        
+
         # added_st = contig[new_qstart:int(qstart) - 1]
         # if added_st.count("N") == len(added_st):
         #     added_start = added_st
         # else:
         #     added_start = "N"*int(sstart-1)
-        
+
         # added_e = contig[int(qend):new_qend - 1]
         # if added_e.count("N") == len(added_e):
         #     added_end = added_e
@@ -1863,6 +1869,10 @@ def write_outalleles(outpath, reconstructed, ref, uncall, locuslist, mgt1st, no_
     print("absent:", absent)
     outf.close()
 
+
+def get_timestamp():
+    now = datetime.datetime.now()
+    return now.strftime("%H:%M:%S")
 
 ######## ARGUMENTS/HELP ########
 
