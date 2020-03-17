@@ -189,14 +189,14 @@ def run_assemblypipe(args):
 
     basename = pref + strain
 
-    #if os.path.exists(basename):
-    #    if force:
-    #        shutil.rmtree(basename)
-    #        os.mkdir(basename)
-    #    else:
-    #        sys.exit("\nStrain with this name already has temp or output files. Use -f/--force flag to overwrite\n")
-    #else:
-    #    os.mkdir(basename)
+    if os.path.exists(basename):
+        if force:
+            shutil.rmtree(basename)
+            os.makedirs(basename)
+        else:
+            sys.exit("\nStrain with this name already has temp or output files. Use -f/--force flag to overwrite\n")
+    else:
+        os.makedirs(basename)
 
 
     krakenout1 = basename + "/" + strain + "_kraken_out"
@@ -454,7 +454,7 @@ def run_kraken(args, fq1, fq2, krakenout1, strain, contam):
         print("[" + get_timestamp() + "] Checking for species contamination using pre-existing Kraken report file: ", args.kraken_report)
         with open(args.kraken_report, "r") as f:
             kraken_result = f.read()
-
+        kraken_out = kraken_result
         contamination = check_kraken(kraken_result, args.species)
 
 
